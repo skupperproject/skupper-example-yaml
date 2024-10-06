@@ -4,8 +4,6 @@ metadata:
   name: backend
   labels:
     app: backend
-  annotations:
-    skupper.io/proxy: tcp
 spec:
   selector:
     matchLabels:

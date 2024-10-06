@@ -1,6 +1,7 @@
-apiVersion: v1
-kind: ConfigMap
+apiVersion: skupper.io/v1alpha1
+kind: Site
 metadata:
-  name: skupper-site
-data:
   name: west
+  namespace: west
+spec:
+  linkAccess: default

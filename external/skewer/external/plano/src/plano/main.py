@@ -252,18 +252,18 @@ def print_properties(props, file=None):
 
 ## Directory operations
 
-def find(dirs=None, include="*", exclude=()):
+def find(dirs=None, include="*", exclude=[]):
     if dirs is None:
         dirs = "."
 
     if is_string(dirs):
-        dirs = (dirs,)
+        dirs = [dirs]
 
     if is_string(include):
-        include = (include,)
+        include = [include]
 
     if is_string(exclude):
-        exclude = (exclude,)
+        exclude = [exclude]
 
     found = set()
 
@@ -313,7 +313,7 @@ def change_dir(dir, quiet=False):
 
     return prev_dir
 
-def list_dir(dir=None, include="*", exclude=()):
+def list_dir(dir=None, include="*", exclude=[]):
     if dir is None:
         dir = get_current_dir()
     else:
@@ -322,10 +322,10 @@ def list_dir(dir=None, include="*", exclude=()):
     assert is_dir(dir), dir
 
     if is_string(include):
-        include = (include,)
+        include = [include]
 
     if is_string(exclude):
-        exclude = (exclude,)
+        exclude = [exclude]
 
     names = _os.listdir(dir)
 
@@ -337,6 +337,22 @@ def list_dir(dir=None, include="*", exclude=()):
                 names.remove(name)
 
     return sorted(names)
+
+def print_dir(dir=None, include="*", exclude=[]):
+    if dir is None:
+        dir = get_current_dir()
+    else:
+        dir = expand(dir)
+
+    names = list_dir(dir=dir, include=include, exclude=exclude)
+
+    print("{}:".format(get_absolute_path(dir)))
+
+    if names:
+        for name in names:
+            print(f"  {name}")
+    else:
+        print("  [none]")
 
 # No args constructor gets a temp dir
 class working_dir:
@@ -519,13 +535,13 @@ def copy(from_path, to_path, symlinks=True, inside=True, quiet=False):
     else:
         make_parent_dir(to_path, quiet=True)
 
-    if is_dir(from_path):
+    if is_link(from_path) and symlinks:
+        make_link(to_path, read_link(from_path), quiet=True)
+    elif is_dir(from_path):
         for name in list_dir(from_path):
             copy(join(from_path, name), join(to_path, name), symlinks=symlinks, inside=False, quiet=True)
 
         _shutil.copystat(from_path, to_path)
-    elif is_link(from_path) and symlinks:
-        make_link(to_path, read_link(from_path), quiet=True)
     else:
         _shutil.copy2(from_path, to_path)
 
@@ -543,9 +559,39 @@ def move(from_path, to_path, inside=True, quiet=False):
 
     return to_path
 
+def replace(path, replacement, quiet=False):
+    path = expand(path)
+    replacement = expand(replacement)
+
+    _notice(quiet, "Replacing {} with {}", repr(path), repr(replacement))
+
+    with temp_dir() as backup_dir:
+        backup = join(backup_dir, "backup")
+        backup_created = False
+
+        if exists(path):
+            move(path, backup, quiet=True)
+            backup_created = True
+
+        try:
+            move(replacement, path, quiet=True)
+        except OSError:
+            notice("Removing")
+            remove(path, quiet=True)
+
+            if backup_created:
+                move(backup, path, quiet=True)
+
+            raise
+
+        assert not exists(replacement), replacement
+        assert exists(path), path
+
+    return path
+
 def remove(paths, quiet=False):
     if is_string(paths):
-        paths = (paths,)
+        paths = [paths]
 
     for path in paths:
         path = expand(path)
@@ -649,9 +695,9 @@ def tail_lines(file, count):
 
     return lines[-count:]
 
-def replace_in_file(file, expr, replacement, count=0):
+def string_replace_file(file, expr, replacement, count=0):
     file = expand(file)
-    return write(file, replace(read(file), expr, replacement, count=count))
+    return write(file, string_replace(read(file), expr, replacement, count=count))
 
 def concatenate(file, input_files):
     file = expand(file)
@@ -677,7 +723,7 @@ def unique(iterable):
 
 def skip(iterable, values=(None, "", (), [], {})):
     if is_scalar(values):
-        values = (values,)
+        values = [values]
 
     items = list()
 
@@ -1387,7 +1433,7 @@ _signal.signal(_signal.SIGTERM, _default_sigterm_handler)
 
 ## String operations
 
-def replace(string, expr, replacement, count=0):
+def string_replace(string, expr, replacement, count=0):
     return _re.sub(expr, replacement, string, count)
 
 def remove_prefix(string, prefix):

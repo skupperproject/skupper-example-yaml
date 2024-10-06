@@ -37,10 +37,10 @@ def check_environment():
 def resource_exists(resource):
     return run(f"kubectl get {resource}", output=DEVNULL, check=False, quiet=True).exit_code == 0
 
-def get_resource_jsonpath(resource, jsonpath):
+def get_resource_json(resource, jsonpath=""):
     return call(f"kubectl get {resource} -o jsonpath='{{{jsonpath}}}'", quiet=True)
 
-def await_resource(resource, timeout=240):
+def await_resource(resource, timeout=300):
     assert "/" in resource, resource
 
     start_time = get_time()
@@ -63,7 +63,7 @@ def await_resource(resource, timeout=240):
             run(f"kubectl logs {resource}")
             raise
 
-def await_external_ip(service, timeout=240):
+def await_ingress(service, timeout=300):
     assert service.startswith("service/"), service
 
     start_time = get_time()
@@ -71,24 +71,36 @@ def await_external_ip(service, timeout=240):
     await_resource(service, timeout=timeout)
 
     while True:
-        notice(f"Waiting for external IP from {service} to become available")
+        notice(f"Waiting for hostname or IP from {service} to become available")
 
-        if get_resource_jsonpath(service, ".status.loadBalancer.ingress") != "":
+        json = get_resource_json(service, ".status.loadBalancer.ingress")
+
+        if json != "":
             break
 
         if get_time() - start_time > timeout:
-            fail(f"Timed out waiting for external IP for {service}")
+            fail(f"Timed out waiting for hostnmae or external IP for {service}")
 
         sleep(5, quiet=True)
 
-    return get_resource_jsonpath(service, ".status.loadBalancer.ingress[0].ip")
+    data = parse_json(json)
 
-def await_http_ok(service, url_template, user=None, password=None, timeout=240):
+    if len(data):
+        if "hostname" in data[0]:
+            return data[0]["hostname"]
+
+        if "ip" in data[0]:
+            return data[0]["ip"]
+
+    fail(f"Failed to get hostname or IP from {service}")
+
+def await_http_ok(service, url_template, user=None, password=None, timeout=300):
     assert service.startswith("service/"), service
 
     start_time = get_time()
 
-    ip = await_external_ip(service, timeout=timeout)
+    ip = await_ingress(service, timeout=timeout)
+
     url = url_template.format(ip)
     insecure = url.startswith("https")
 
@@ -108,7 +120,7 @@ def await_http_ok(service, url_template, user=None, password=None, timeout=240):
 def await_console_ok():
     await_resource("secret/skupper-console-users")
 
-    password = get_resource_jsonpath("secret/skupper-console-users", ".data.admin")
+    password = get_resource_json("secret/skupper-console-users", ".data.admin")
     password = base64_decode(password)
 
     await_http_ok("service/skupper", "https://{}:8010/", user="admin", password=password)
@@ -164,8 +176,8 @@ def run_step(model, step, work_dir, check=True):
                 if command.await_resource:
                     await_resource(command.await_resource)
 
-                if command.await_external_ip:
-                    await_external_ip(command.await_external_ip)
+                if command.await_ingress:
+                    await_ingress(command.await_ingress)
 
                 if command.await_http_ok:
                     await_http_ok(*command.await_http_ok)
@@ -173,8 +185,20 @@ def run_step(model, step, work_dir, check=True):
                 if command.await_console_ok:
                     await_console_ok()
 
+                if command.await_port:
+                    await_port(command.await_port, timeout=300)
+
                 if command.run:
-                    run(command.run.replace("~", work_dir), shell=True, check=check)
+                    proc = run(command.run.replace("~", work_dir), shell=True, check=False)
+
+                    if command.expect_failure:
+                        if proc.exit_code == 0:
+                            fail("A command expected to fail did not fail")
+
+                        continue
+
+                    if check and proc.exit_code > 0:
+                        raise PlanoProcessError(proc)
 
 def pause_for_demo(model):
     notice("Pausing for demo time")
@@ -186,17 +210,15 @@ def pause_for_demo(model):
 
     if first_site.platform == "kubernetes":
         with first_site:
-            if resource_exists("service/frontend"):
-                if get_resource_jsonpath("service/frontend", ".spec.type") == "LoadBalancer":
-                    frontend_ip = await_external_ip("service/frontend")
-                    frontend_url = f"http://{frontend_ip}:8080/"
+            if resource_exists("deployment/frontend"):
+                frontend_url = f"http://localhost:8080/"
 
             if resource_exists("secret/skupper-console-users"):
-                console_ip = await_external_ip("service/skupper")
-                console_url = f"https://{console_ip}:8010/"
+                console_host = await_ingress("service/skupper")
+                console_url = f"https://{console_host}:8010/"
 
                 await_resource("secret/skupper-console-users")
-                password = get_resource_jsonpath("secret/skupper-console-users", ".data.admin")
+                password = get_resource_json("secret/skupper-console-users", ".data.admin")
                 password = base64_decode(password).decode("ascii")
 
     print()
@@ -284,9 +306,9 @@ def generate_readme(skewer_file, output_file):
         if not condition:
             return
 
-        fragment = replace(heading, r"[ -]", "_")
-        fragment = replace(fragment, r"[\W]", "")
-        fragment = replace(fragment, "_", "-")
+        fragment = string_replace(heading, r"[ -]", "_")
+        fragment = string_replace(fragment, r"[\W]", "")
+        fragment = string_replace(fragment, "_", "-")
         fragment = fragment.lower()
 
         out.append(f"* [{heading}](#{fragment})")
@@ -297,8 +319,11 @@ def generate_readme(skewer_file, output_file):
 
         out.append(f"## {heading}")
         out.append("")
-        out.append(text.strip())
+        out.append(text)
         out.append("")
+
+    out.append("<!-- NOTE: This file is generated from skewer.yaml.  Do not edit it directly. -->")
+    out.append("")
 
     out.append(f"# {model.title}")
     out.append("")
@@ -318,14 +343,14 @@ def generate_readme(skewer_file, output_file):
     out.append("")
 
     append_toc_entry("Overview", model.overview)
-    append_toc_entry("Prerequisites")
+    append_toc_entry("Prerequisites", model.prerequisites)
 
     for step in model.steps:
         append_toc_entry(generate_step_heading(step))
 
-    append_toc_entry("Summary")
-    append_toc_entry("Next steps")
-    append_toc_entry("About this example")
+    append_toc_entry("Summary", model.summary)
+    append_toc_entry("Next steps", model.next_steps)
+    append_toc_entry("About this example", model.about_this_example)
 
     out.append("")
 
@@ -340,7 +365,7 @@ def generate_readme(skewer_file, output_file):
 
     append_section("Summary", model.summary)
     append_section("Next steps", model.next_steps)
-    append_section("About this example", standard_text["about_this_example"].strip())
+    append_section("About this example", model.about_this_example)
 
     write(output_file, "\n".join(out).strip() + "\n")
 
@@ -415,17 +440,22 @@ def apply_standard_steps(model):
         del step.data["standard"]
 
         def apply_attribute(name, default=None):
-            if name not in step.data:
-                value = standard_step_data.get(name, default)
+            standard_value = standard_step_data.get(name, default)
+            value = step.data.get(name, standard_value)
 
-                if value and name in ("title", "preamble", "postamble"):
-                    for i, site in enumerate([x for _, x in model.sites]):
-                        value = value.replace(f"@site{i}@", site.title)
+            if is_string(value):
+                if standard_value is not None:
+                    value = value.replace("@default@", str(nvl(standard_value, "")).strip())
 
-                        if site.namespace:
-                            value = value.replace(f"@namespace{i}@", site.namespace)
+                for i, site in enumerate([x for _, x in model.sites]):
+                    value = value.replace(f"@site{i}@", site.title)
 
-                step.data[name] = value
+                    if site.namespace:
+                        value = value.replace(f"@namespace{i}@", site.namespace)
+
+                value = value.strip()
+
+            step.data[name] = value
 
         apply_attribute("name")
         apply_attribute("title")
@@ -501,7 +531,13 @@ def get_github_owner_repo():
 
 def object_property(name, default=None):
     def get(obj):
-        return obj.data.get(name, default)
+        value = obj.data.get(name, default)
+
+        if is_string(value):
+            value = value.replace("@default@", str(nvl(default, "")).strip())
+            value = value.strip()
+
+        return value
 
     return property(get)
 
@@ -522,9 +558,10 @@ class Model:
     subtitle = object_property("subtitle")
     workflow = object_property("workflow", "main.yaml")
     overview = object_property("overview")
-    prerequisites = object_property("prerequisites", standard_text["prerequisites"].strip())
+    prerequisites = object_property("prerequisites", standard_text["prerequisites"])
     summary = object_property("summary")
-    next_steps = object_property("next_steps", standard_text["next_steps"].strip())
+    next_steps = object_property("next_steps", standard_text["next_steps"])
+    about_this_example = object_property("about_this_example", standard_text["about_this_example"])
 
     def __init__(self, skewer_file, kubeconfigs=[]):
         self.skewer_file = skewer_file
@@ -588,7 +625,7 @@ class Site:
         check_required_attributes(self, "platform")
         check_unknown_attributes(self)
 
-        if self.platform not in ("kubernetes", "podman"):
+        if self.platform not in ("kubernetes", "podman", None):
             fail(f"{self} attribute 'platform' has an illegal value: {self.platform}")
 
         if self.platform == "kubernetes":
@@ -648,12 +685,14 @@ class Step:
 
 class Command:
     run = object_property("run")
+    expect_failure = object_property("expect_failure", False)
     apply = object_property("apply")
     output = object_property("output")
     await_resource = object_property("await_resource")
-    await_external_ip = object_property("await_external_ip")
+    await_ingress = object_property("await_ingress")
     await_http_ok = object_property("await_http_ok")
     await_console_ok = object_property("await_console_ok")
+    await_port = object_property("await_port")
 
     def __init__(self, model, data):
         self.model = model
@@ -691,23 +730,34 @@ class Minikube:
 
         run("minikube start -p skewer --auto-update-drivers false")
 
-        tunnel_output_file = open(f"{self.work_dir}/minikube-tunnel-output", "w")
-        self.tunnel = start("minikube tunnel -p skewer", output=tunnel_output_file)
+        try:
+            tunnel_output_file = open(f"{self.work_dir}/minikube-tunnel-output", "w")
+            self.tunnel = start("minikube tunnel -p skewer", output=tunnel_output_file)
 
-        model = Model(self.skewer_file)
-        model.check()
+            try:
+                model = Model(self.skewer_file)
+                model.check()
 
-        kube_sites = [x for _, x in model.sites if x.platform == "kubernetes"]
+                kube_sites = [x for _, x in model.sites if x.platform == "kubernetes"]
 
-        for site in kube_sites:
-            kubeconfig = site.env["KUBECONFIG"].replace("~", self.work_dir)
-            site.env["KUBECONFIG"] = kubeconfig
+                for site in kube_sites:
+                    kubeconfig = site.env["KUBECONFIG"]
+                    kubeconfig = kubeconfig.replace("~", self.work_dir)
+                    kubeconfig = expand(kubeconfig)
 
-            self.kubeconfigs.append(kubeconfig)
+                    site.env["KUBECONFIG"] = kubeconfig
 
-            with site:
-                run("minikube update-context -p skewer")
-                check_file(ENV["KUBECONFIG"])
+                    self.kubeconfigs.append(kubeconfig)
+
+                    with site:
+                        run("minikube update-context -p skewer")
+                        check_file(ENV["KUBECONFIG"])
+            except:
+                stop(self.tunnel)
+                raise
+        except:
+            run("minikube delete -p skewer")
+            raise
 
         return self
 

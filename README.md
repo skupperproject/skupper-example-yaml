@@ -1,3 +1,5 @@
+<!-- NOTE: This file is generated from skewer.yaml.  Do not edit it directly. -->
+
 # Skupper Hello World using YAML
 
 [![main](https://github.com/ssorj/skupper-example-yaml/actions/workflows/main.yaml/badge.svg)](https://github.com/ssorj/skupper-example-yaml/actions/workflows/main.yaml)
@@ -15,13 +17,12 @@ across cloud providers, data centers, and edge sites.
 
 * [Overview](#overview)
 * [Prerequisites](#prerequisites)
-* [Step 1: Install Skupper in your clusters](#step-1-install-skupper-in-your-clusters)
-* [Step 2: Set up your namespaces](#step-2-set-up-your-namespaces)
+* [Step 1: Set up your clusters](#step-1-set-up-your-clusters)
+* [Step 2: Install Skupper on your clusters](#step-2-install-skupper-on-your-clusters)
 * [Step 3: Apply your YAML resources](#step-3-apply-your-yaml-resources)
 * [Step 4: Link your sites](#step-4-link-your-sites)
 * [Step 5: Access the frontend](#step-5-access-the-frontend)
 * [Cleaning up](#cleaning-up)
-* [Summary](#summary)
 * [Next steps](#next-steps)
 * [About this example](#about-this-example)
 
@@ -63,51 +64,12 @@ services without exposing the backend to the public internet.
 [install-kubectl]: https://kubernetes.io/docs/tasks/tools/install-kubectl/
 [kube-providers]: https://skupper.io/start/kubernetes.html
 
-## Step 1: Install Skupper in your clusters
+## Step 1: Set up your clusters
 
-Use the `kubectl apply` command to install the Skupper
-controller in each cluster.
-
-_**West:**_
-
-~~~ shell
-kubectl apply -f skupper.yaml
-~~~
-
-_Sample output:_
-
-~~~ console
-$ kubectl apply -f skupper.yaml
-namespace/skupper-site-controller created
-serviceaccount/skupper-site-controller created
-clusterrole.rbac.authorization.k8s.io/skupper-site-controller created
-clusterrolebinding.rbac.authorization.k8s.io/skupper-site-controller created
-deployment.apps/skupper-site-controller created
-~~~
-
-_**East:**_
-
-~~~ shell
-kubectl apply -f skupper.yaml
-~~~
-
-_Sample output:_
-
-~~~ console
-$ kubectl apply -f skupper.yaml
-namespace/skupper-site-controller created
-serviceaccount/skupper-site-controller created
-clusterrole.rbac.authorization.k8s.io/skupper-site-controller created
-clusterrolebinding.rbac.authorization.k8s.io/skupper-site-controller created
-deployment.apps/skupper-site-controller created
-~~~
-
-## Step 2: Set up your namespaces
-
-Skupper is designed for use with multiple Kubernetes namespaces,
-usually on different clusters.  The `skupper` and `kubectl`
-commands use your [kubeconfig][kubeconfig] and current context to
-select the namespace where they operate.
+Skupper is designed for use with multiple Kubernetes clusters.
+The `skupper` and `kubectl` commands use your
+[kubeconfig][kubeconfig] and current context to select the cluster
+and namespace where they operate.
 
 [kubeconfig]: https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/
 
@@ -152,6 +114,27 @@ kubectl create namespace east
 kubectl config set-context --current --namespace east
 ~~~
 
+## Step 2: Install Skupper on your clusters
+
+Using Skupper on Kubernetes requires the installation of the
+Skupper custom resource definitions (CRDs) and the Skupper
+controller.
+
+For each cluster, use `kubectl apply` with the Skupper
+installation YAML to install the CRDs and controller.
+
+_**West:**_
+
+~~~ shell
+kubectl apply -f https://skupper.io/v2/install.yaml
+~~~
+
+_**East:**_
+
+~~~ shell
+kubectl apply -f https://skupper.io/v2/install.yaml
+~~~
+
 ## Step 3: Apply your YAML resources
 
 To configure our example sites and service bindings, we are
@@ -181,12 +164,13 @@ information.
 [site.yaml](west/site.yaml):
 
 ~~~ yaml
-apiVersion: v1
-kind: ConfigMap
+apiVersion: skupper.io/v1alpha1
+kind: Site
 metadata:
-  name: skupper-site
-data:
   name: west
+  namespace: west
+spec:
+  linkAccess: default
 ~~~
 
 #### Resources in East
@@ -198,13 +182,11 @@ ingress is required at this site for the Hello World example.
 [site.yaml](east/site.yaml):
 
 ~~~ yaml
-apiVersion: v1
-kind: ConfigMap
+apiVersion: skupper.io/v1alpha1
+kind: Site
 metadata:
-  name: skupper-site
-data:
   name: east
-  ingress: none
+  namespace: east
 ~~~
 
 In East, the `backend` deployment has an annotation named
@@ -251,13 +233,15 @@ Skupper sites.
 _**West:**_
 
 ~~~ shell
-kubectl apply -f west/site.yaml -f west/frontend.yaml
+kubectl apply -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
+kubectl wait site/west --for condition=Ready --timeout 120s
 ~~~
 
 _Sample output:_
 
 ~~~ console
-$ kubectl apply -f west/site.yaml -f west/frontend.yaml
+$ kubectl apply -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
+XXX
 configmap/skupper-site created
 deployment.apps/frontend created
 ~~~
@@ -265,13 +249,15 @@ deployment.apps/frontend created
 _**East:**_
 
 ~~~ shell
-kubectl apply -f east/site.yaml -f east/backend.yaml
+kubectl apply -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
+kubectl wait site/east --for condition=Ready --timeout 120s
 ~~~
 
 _Sample output:_
 
 ~~~ console
-$ kubectl apply -f east/site.yaml -f east/backend.yaml
+$ kubectl apply -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
+XXX
 configmap/skupper-site created
 deployment.apps/backend created
 ~~~
@@ -297,7 +283,7 @@ secret token in West and create the link in East.
 To install the Skupper command:
 
 ~~~ shell
-curl https://skupper.io/install.sh | sh
+curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-1
 ~~~
 
 For more installation options, see [Installing
@@ -312,28 +298,39 @@ East to create a link.
 _**West:**_
 
 ~~~ shell
-skupper token create ~/secret.token
+skupper token issue ~/token.yaml
 ~~~
 
 _Sample output:_
 
 ~~~ console
-$ skupper token create ~/secret.token
-Token written to ~/secret.token
+$ skupper token issue ~/token.yaml
+Waiting for token status ...
+
+Grant "west-cad4f72d-2917-49b9-ab66-cdaca4d6cf9c" is ready
+Token file /run/user/1000/skewer/token.yaml created
+
+Transfer this file to a remote site. At the remote site,
+create a link to this site using the "skupper token redeem" command:
+
+	skupper token redeem <file>
+
+The token expires after 1 use(s) or after 15m0s.
 ~~~
 
 _**East:**_
 
 ~~~ shell
-skupper link create ~/secret.token
+skupper token redeem ~/token.yaml
 ~~~
 
 _Sample output:_
 
 ~~~ console
-$ skupper link create ~/secret.token
-Site configured to link to https://10.105.193.154:8081/ed9c37f6-d78a-11ec-a8c7-04421a4c5042 (name=link1)
-Check the status of the link using 'skupper link status'.
+$ skupper token redeem ~/token.yaml
+Waiting for token status ...
+Token "west-cad4f72d-2917-49b9-ab66-cdaca4d6cf9c" has been redeemed
+You can now safely delete /run/user/1000/skewer/token.yaml
 ~~~
 
 If your terminal sessions are on different machines, you may need
@@ -346,43 +343,17 @@ creation.
 In order to use and test the application, we need external access
 to the frontend.
 
-Use `kubectl expose` with `--type LoadBalancer` to open network
-access to the frontend service.
-
-Once the frontend is exposed, use `kubectl get service/frontend`
-to look up the external IP of the frontend service.  If the
-external IP is `<pending>`, try again after a moment.
-
-Once you have the external IP, use `curl` or a similar tool to
-request the `/api/health` endpoint at that address.
-
-**Note:** The `<external-ip>` field in the following commands is a
-placeholder.  The actual value is an IP address.
+Use `kubectl port-forward` to make the frontend available at
+`localhost:8080`.
 
 _**West:**_
 
 ~~~ shell
-kubectl expose deployment/frontend --port 8080 --type LoadBalancer
-kubectl get service/frontend
-curl http://<external-ip>:8080/api/health
+kubectl port-forward deployment/frontend 8080:8080
 ~~~
 
-_Sample output:_
-
-~~~ console
-$ kubectl expose deployment/frontend --port 8080 --type LoadBalancer
-service/frontend exposed
-
-$ kubectl get service/frontend
-NAME       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)          AGE
-frontend   LoadBalancer   10.103.232.28   <external-ip>   8080:30407/TCP   15s
-
-$ curl http://<external-ip>:8080/api/health
-OK
-~~~
-
-If everything is in order, you can now access the web interface by
-navigating to `http://<external-ip>:8080/` in your browser.
+You can now access the web interface by navigating to
+[http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Cleaning up
 
@@ -392,15 +363,15 @@ the following commands.
 _**West:**_
 
 ~~~ shell
-kubectl delete -f west/site.yaml -f west/frontend.yaml
-kubectl delete -f skupper.yaml
+kubectl delete -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
+kubectl delete -f https://skupper.io/v2/install.yaml
 ~~~
 
 _**East:**_
 
 ~~~ shell
-kubectl delete -f east/site.yaml -f east/backend.yaml
-kubectl delete -f skupper.yaml
+kubectl delete -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
+kubectl delete -f https://skupper.io/v2/install.yaml
 ~~~
 
 ## Next steps

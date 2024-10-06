@@ -39,28 +39,8 @@ sites:
     env:
       KUBECONFIG: ~/.kube/config-east
 steps:
-  - title: Install Skupper in your clusters
-    preamble: |
-      Use the `kubectl apply` command to install the Skupper
-      controller in each cluster.
-    commands:
-      west:
-        - run: kubectl apply -f skupper.yaml
-          output: |
-            namespace/skupper-site-controller created
-            serviceaccount/skupper-site-controller created
-            clusterrole.rbac.authorization.k8s.io/skupper-site-controller created
-            clusterrolebinding.rbac.authorization.k8s.io/skupper-site-controller created
-            deployment.apps/skupper-site-controller created
-      east:
-        - run: kubectl apply -f skupper.yaml
-          output: |
-            namespace/skupper-site-controller created
-            serviceaccount/skupper-site-controller created
-            clusterrole.rbac.authorization.k8s.io/skupper-site-controller created
-            clusterrolebinding.rbac.authorization.k8s.io/skupper-site-controller created
-            deployment.apps/skupper-site-controller created
-  - standard: kubernetes/set_up_your_namespaces
+  - standard: kubernetes/set_up_your_clusters
+  - standard: kubernetes/install_skupper_on_your_clusters
   - title: Apply your YAML resources
     preamble: |
       To configure our example sites and service bindings, we are
@@ -90,12 +70,13 @@ steps:
       [site.yaml](west/site.yaml):
 
       ~~~ yaml
-      apiVersion: v1
-      kind: ConfigMap
+      apiVersion: skupper.io/v1alpha1
+      kind: Site
       metadata:
-        name: skupper-site
-      data:
         name: west
+        namespace: west
+      spec:
+        linkAccess: default
       ~~~
 
       #### Resources in East
@@ -107,13 +88,11 @@ steps:
       [site.yaml](east/site.yaml):
 
       ~~~ yaml
-      apiVersion: v1
-      kind: ConfigMap
+      apiVersion: skupper.io/v1alpha1
+      kind: Site
       metadata:
-        name: skupper-site
-      data:
         name: east
-        ingress: none
+        namespace: east
       ~~~
 
       In East, the `backend` deployment has an annotation named
@@ -158,20 +137,23 @@ steps:
       [minikube-tunnel]: https://skupper.io/start/minikube.html#running-minikube-tunnel
     commands:
       west:
-        - run: kubectl apply -f west/site.yaml -f west/frontend.yaml
+        - run: kubectl apply -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
           output: |
+            XXX
             configmap/skupper-site created
             deployment.apps/frontend created
-        - await_resource: deployment/skupper-service-controller
+        - run: kubectl wait site/west --for condition=Ready --timeout 120s
         - await_resource: deployment/frontend
       east:
-        - run: kubectl apply -f east/site.yaml -f east/backend.yaml
+        - run: kubectl apply -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
           output: |
+            XXX
             configmap/skupper-site created
             deployment.apps/backend created
-        - await_resource: deployment/skupper-service-controller
+        # - await_resource: deployment/skupper-service-controller
+        - run: kubectl wait site/east --for condition=Ready --timeout 120s
         - await_resource: deployment/backend
-  - standard: link_your_sites
+  - standard: kubernetes/link_your_sites
     preamble: |
       You can configure sites and service bindings declaratively, but
       linking sites is different.  To create a link, you must have the
@@ -192,7 +174,7 @@ steps:
       To install the Skupper command:
 
       ~~~ shell
-      curl https://skupper.io/install.sh | sh
+      curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-1
       ~~~
 
       For more installation options, see [Installing
@@ -204,14 +186,14 @@ steps:
 
       [install]: https://skupper.io/install/index.html
   - standard: hello_world/access_the_frontend
-  - standard: cleaning_up
+  - standard: kubernetes/cleaning_up
     commands:
       west:
-        - run: kubectl delete -f west/site.yaml -f west/frontend.yaml
-        - run: kubectl delete -f skupper.yaml
+        - run: kubectl delete -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
+        - run: kubectl delete -f https://skupper.io/v2/install.yaml
       east:
-        - run: kubectl delete -f east/site.yaml -f east/backend.yaml
-        - run: kubectl delete -f skupper.yaml
+        - run: kubectl delete -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
+        - run: kubectl delete -f https://skupper.io/v2/install.yaml
           apply: readme
-        - run: kubectl delete -f skupper.yaml --ignore-not-found
+        - run: kubectl delete -f https://skupper.io/v2/install.yaml --ignore-not-found
           apply: test
