@@ -2,7 +2,7 @@
 
 # Skupper Hello World using YAML
 
-[![main](https://github.com/ssorj/skupper-example-yaml/actions/workflows/main.yaml/badge.svg)](https://github.com/ssorj/skupper-example-yaml/actions/workflows/main.yaml)
+[![main](https://github.com/skupperproject/skupper-example-yaml/actions/workflows/main.yaml/badge.svg)](https://github.com/skupperproject/skupper-example-yaml/actions/workflows/main.yaml)
 
 #### A minimal HTTP application deployed across Kubernetes clusters using Skupper
 
@@ -29,7 +29,7 @@ across cloud providers, data centers, and edge sites.
 ## Overview
 
 This example is a variant of [Skupper Hello World][hello-world] that
-is deployed using YAML resource definitions instead of imperative
+is deployed using YAML custom resources instead of imperative
 commands.
 
 It contains two services:
@@ -142,24 +142,37 @@ using the following resources:
 
 West:
 
-* [site.yaml](west/site.yaml) - Skupper configuration for West
+* [site.yaml](west/site.yaml) - The Skupper _Site_ resource for
+  West
 * [frontend.yaml](west/frontend.yaml) - The Hello World frontend
+  deployment
+* [listener.yaml](west/listener.yaml) - A Skupper _Listener_
+  resource for exposing the backend in East to the local
+  frontend
 
 East:
 
-* [site.yaml](east/site.yaml) - Skupper configuration for East
+* [site.yaml](east/site.yaml) - The Skupper _Site_ resource for
+  East
 * [backend.yaml](east/backend.yaml) - The Hello World backend
+  deployment
+* [connector.yaml](east/connector.yaml) - A Skupper _Connector_
+  resource for binding the backend to the listener in West
 
-Let's look at some of these resources in more detail.
+Let's look at these resources in more detail.
 
 #### Resources in West
 
-The `site` ConfigMap defines a Skupper site for its associated
+The _Site_ resource defines a Skupper site for its associated
 Kubernetes namespace.  This is where you set site configuration
-options.  See the [config reference][config] for more
-information.
+options.  See the [Site configuration reference][site-config]
+for more information.
 
-[config]: https://skupper.io/docs/yaml/index.html
+The `linkAccess: default` field configures site West to accept
+site-to-site links.  This example creates a link from East to
+West, so the receiving side, West, must enable link access.
+
+[site-config]: https://skupperproject.github.io/refdog/resources/site.html
 
 [site.yaml](west/site.yaml):
 
@@ -173,11 +186,57 @@ spec:
   linkAccess: default
 ~~~
 
+The frontend is a standard Kubernetes deployment.
+
+[frontend.yaml](west/frontend.yaml):
+
+~~~ yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: quay.io/skupper/hello-world-frontend
+          ports:
+            - containerPort: 8080
+~~~
+
+The code in frontend makes API calls to
+`http://backend:8080/api/hello`.  The _Listener_ resource below
+configures the router to expose a connection endpoint at
+`backend:8080` and forward any connections there to routers in
+remote sites using the routing key `backend`.
+
+[listener.yaml](west/listener.yaml):
+
+~~~ yaml
+apiVersion: skupper.io/v1alpha1
+kind: Listener
+metadata:
+  name: backend
+  namespace: west
+spec:
+  port: 8080
+  host: backend
+  routingKey: backend
+~~~
+
 #### Resources in East
 
-Like the one for West, here is the Skupper site definition for
-the East.  It includes the `ingress: none` setting since no
-ingress is required at this site for the Hello World example.
+The _Site_ resource for East.
 
 [site.yaml](east/site.yaml):
 
@@ -189,22 +248,17 @@ metadata:
   namespace: east
 ~~~
 
-In East, the `backend` deployment has an annotation named
-`skupper.io/proxy` with the value `tcp`.  This tells Skupper to
-expose the backend on the Skupper network.  As a consequence,
-the frontend in West will be able to see the backend and call
-its API.
+The backend is a standard Kubernetes deployment.
 
 [backend.yaml](east/backend.yaml):
 
-<pre>apiVersion: apps/v1
+~~~ yaml
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
   labels:
     app: backend
-  <b>annotations:
-    skupper.io/proxy: tcp</b>
 spec:
   selector:
     matchLabels:
@@ -219,16 +273,26 @@ spec:
         - name: backend
           image: quay.io/skupper/hello-world-backend
           ports:
-            - containerPort: 8080</pre>
+            - containerPort: 8080
+~~~
 
-Now we're ready to apply everything.  Use the `kubectl apply`
-command with the resource definitions for each site.
+The _Connector_ resource below configures the router to take
+remote connections with routing key `backend` and forward them
+to port 8080 on pods matching the selector `app=backend`.
 
-**Note:** If you are using Minikube, [you need to start
-`minikube tunnel`][minikube-tunnel] before you create the
-Skupper sites.
+[connector.yaml](east/connector.yaml):
 
-[minikube-tunnel]: https://skupper.io/start/minikube.html#running-minikube-tunnel
+~~~ yaml
+apiVersion: skupper.io/v1alpha1
+kind: Connector
+metadata:
+  name: backend
+  namespace: east
+spec:
+  routingKey: backend
+  port: 8080
+  selector: app=backend
+~~~
 
 _**West:**_
 
@@ -241,9 +305,9 @@ _Sample output:_
 
 ~~~ console
 $ kubectl apply -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
-XXX
-configmap/skupper-site created
+site.skupper.io/west created
 deployment.apps/frontend created
+listener.skupper.io/backend created
 ~~~
 
 _**East:**_
@@ -257,9 +321,9 @@ _Sample output:_
 
 ~~~ console
 $ kubectl apply -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
-XXX
-configmap/skupper-site created
+site.skupper.io/east created
 deployment.apps/backend created
+connector.skupper.io/backend created
 ~~~
 
 ## Step 4: Link your sites
@@ -363,15 +427,15 @@ the following commands.
 _**West:**_
 
 ~~~ shell
-kubectl delete -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
-kubectl delete -f https://skupper.io/v2/install.yaml
+kubectl delete -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml --ignore-not-found
+kubectl delete -f https://skupper.io/v2/install.yaml --ignore-not-found
 ~~~
 
 _**East:**_
 
 ~~~ shell
-kubectl delete -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
-kubectl delete -f https://skupper.io/v2/install.yaml
+kubectl delete -f east/site.yaml -f east/backend.yaml -f east/connector.yaml --ignore-not-found
+kubectl delete -f https://skupper.io/v2/install.yaml --ignore-not-found
 ~~~
 
 ## Next steps

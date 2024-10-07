@@ -4,6 +4,6 @@ metadata:
   name: backend
   namespace: west
 spec:
-  routingKey: backend
   port: 8080
   host: backend
+  routingKey: backend
