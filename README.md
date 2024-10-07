@@ -161,12 +161,12 @@ East:
 
 Let's look at these resources in more detail.
 
-#### Resources in West
+### Resources in West
 
 The _Site_ resource defines a Skupper site for its associated
 Kubernetes namespace.  This is where you set site configuration
-options.  See the [Site configuration reference][site-config]
-for more information.
+options.  See the [Site resource reference][site-config] for
+more information.
 
 The `linkAccess: default` field configures site West to accept
 site-to-site links.  This example creates a link from East to
@@ -218,7 +218,10 @@ The code in frontend makes API calls to
 `http://backend:8080/api/hello`.  The _Listener_ resource below
 configures the router to expose a connection endpoint at
 `backend:8080` and forward any connections there to routers in
-remote sites using the routing key `backend`.
+remote sites using the routing key `backend`.  See the [Listener
+resource reference][listener-config] for more information.
+
+[listener-config]: https://skupperproject.github.io/refdog/resources/listener.html
 
 [listener.yaml](west/listener.yaml):
 
@@ -234,7 +237,7 @@ spec:
   routingKey: backend
 ~~~
 
-#### Resources in East
+### Resources in East
 
 The _Site_ resource for East.
 
@@ -278,7 +281,11 @@ spec:
 
 The _Connector_ resource below configures the router to take
 remote connections with routing key `backend` and forward them
-to port 8080 on pods matching the selector `app=backend`.
+to port 8080 on pods matching the selector `app=backend`.  See
+the [Connector resource reference][connector-config] for more
+information.
+
+[connector-config]: https://skupperproject.github.io/refdog/resources/connector.html
 
 [connector.yaml](east/connector.yaml):
 
@@ -294,11 +301,21 @@ spec:
   selector: app=backend
 ~~~
 
+### Applying the resources
+
+Now we're ready to apply everything.  Use the `kubectl apply`
+command with the resources for each site.
+
+**Note:** If you are using Minikube, [you need to start
+`minikube tunnel`][minikube-tunnel] before you create the
+Skupper sites.
+
+[minikube-tunnel]: https://skupper.io/start/minikube.html#running-minikube-tunnel
+
 _**West:**_
 
 ~~~ shell
 kubectl apply -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml
-kubectl wait site/west --for condition=Ready --timeout 120s
 ~~~
 
 _Sample output:_
@@ -314,7 +331,6 @@ _**East:**_
 
 ~~~ shell
 kubectl apply -f east/site.yaml -f east/backend.yaml -f east/connector.yaml
-kubectl wait site/east --for condition=Ready --timeout 120s
 ~~~
 
 _Sample output:_
@@ -328,11 +344,15 @@ connector.skupper.io/backend created
 
 ## Step 4: Link your sites
 
+A Skupper _link_ is a channel for communication between two
+sites.  Links serve as a transport for application connections
+and requests.
+
 You can configure sites and service bindings declaratively, but
 linking sites is different.  To create a link, you must have the
 authentication secret and connection details of the remote site.
 Since these cannot be known in advance, linking must be
-procedural.
+procedural, not declarative.
 
 <!--
 **Note:** There are several ways to automate the generation and
@@ -341,8 +361,10 @@ Backstage, or Vault.  See [Token distribution][XXX] for more
 information.
 -->
 
-This example uses the Skupper command-line tool to generate the
-secret token in West and create the link in East.
+Skupper provides tokens as one way to securely create
+site-to-site links.  This example uses the Skupper command-line
+tool to issue the secret token in West and redeem the token for
+a link in East.
 
 To install the Skupper command:
 
@@ -353,9 +375,9 @@ curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-1
 For more installation options, see [Installing
 Skupper][install].
 
-Once the command is installed, use `skupper token create` in
-West to generate the token.  Then, use `skupper link create` in
-East to create a link.
+Once the command is installed, use `skupper token issue` in West
+to generate the token.  Then, use `skupper token redeem` in East
+to create the link.
 
 [install]: https://skupper.io/install/index.html
 
