@@ -39,8 +39,8 @@ sites:
     env:
       KUBECONFIG: ~/.kube/config-east
 steps:
-  - standard: kubernetes/set_up_your_clusters
-  - standard: kubernetes/install_skupper_on_your_clusters
+  - standard: platform/set_up_your_kubernetes_clusters
+  - standard: platform/install_skupper_on_your_kubernetes_clusters
   - title: Apply your YAML resources
     preamble: |
       To configure our example sites and service bindings, we are
@@ -224,7 +224,7 @@ steps:
             site.skupper.io/west created
             deployment.apps/frontend created
             listener.skupper.io/backend created
-        - run: kubectl wait site/west --for condition=Ready --timeout 120s
+        - run: kubectl wait site/west --for condition=Ready --timeout 2m
           apply: test
         - await_resource: deployment/frontend
       east:
@@ -233,10 +233,10 @@ steps:
             site.skupper.io/east created
             deployment.apps/backend created
             connector.skupper.io/backend created
-        - run: kubectl wait site/east --for condition=Ready --timeout 120s
+        - run: kubectl wait site/east --for condition=Ready --timeout 2m
           apply: test
         - await_resource: deployment/backend
-  - standard: kubernetes/link_your_sites
+  - standard: skupper/link_your_sites/kubernetes_cli
     preamble: |
       A Skupper _link_ is a channel for communication between two
       sites.  Links serve as a transport for application connections
@@ -245,8 +245,8 @@ steps:
       You can configure sites and service bindings declaratively, but
       linking sites is different.  To create a link, you must have the
       authentication secret and connection details of the remote site.
-      Since these cannot be known in advance, linking must be
-      procedural, not declarative.
+      Since these cannot always be known in advance, linking is
+      usually procedural, not declarative.
 
       <!--
       **Note:** There are several ways to automate the generation and
@@ -263,7 +263,7 @@ steps:
       To install the Skupper command:
 
       ~~~ shell
-      curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-1
+      curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-2
       ~~~
 
       For more installation options, see [Installing
@@ -274,8 +274,8 @@ steps:
       to create the link.
 
       [install]: https://skupper.io/install/index.html
-  - standard: hello_world/access_the_frontend
-  - standard: kubernetes/cleaning_up
+  - standard: hello_world/access_the_frontend_service/kubernetes_cli
+  - standard: skupper/cleaning_up/kubernetes_cli
     commands:
       west:
         - run: kubectl delete -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml --ignore-not-found

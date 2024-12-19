@@ -17,11 +17,11 @@ across cloud providers, data centers, and edge sites.
 
 * [Overview](#overview)
 * [Prerequisites](#prerequisites)
-* [Step 1: Set up your clusters](#step-1-set-up-your-clusters)
-* [Step 2: Install Skupper on your clusters](#step-2-install-skupper-on-your-clusters)
+* [Step 1: Set up your Kubernetes clusters](#step-1-set-up-your-kubernetes-clusters)
+* [Step 2: Install Skupper on your Kubernetes clusters](#step-2-install-skupper-on-your-kubernetes-clusters)
 * [Step 3: Apply your YAML resources](#step-3-apply-your-yaml-resources)
 * [Step 4: Link your sites](#step-4-link-your-sites)
-* [Step 5: Access the frontend](#step-5-access-the-frontend)
+* [Step 5: Access the frontend service](#step-5-access-the-frontend-service)
 * [Cleaning up](#cleaning-up)
 * [Next steps](#next-steps)
 * [About this example](#about-this-example)
@@ -64,7 +64,7 @@ services without exposing the backend to the public internet.
 [install-kubectl]: https://kubernetes.io/docs/tasks/tools/install-kubectl/
 [kube-providers]: https://skupper.io/start/kubernetes.html
 
-## Step 1: Set up your clusters
+## Step 1: Set up your Kubernetes clusters
 
 Skupper is designed for use with multiple Kubernetes clusters.
 The `skupper` and `kubectl` commands use your
@@ -75,11 +75,10 @@ and namespace where they operate.
 
 Your kubeconfig is stored in a file in your home directory.  The
 `skupper` and `kubectl` commands use the `KUBECONFIG` environment
-variable to locate it.
-
-A single kubeconfig supports only one active context per user.
-Since you will be using multiple contexts at once in this
-exercise, you need to create multiple kubeconfigs.
+variable to locate it.  A single kubeconfig supports only one
+active context per user.  Since you will be using multiple
+contexts at once in this exercise, you need to create multiple
+kubeconfigs.
 
 For each namespace, open a new terminal window.  In each terminal,
 set the `KUBECONFIG` environment variable to a different path and
@@ -114,7 +113,7 @@ kubectl create namespace east
 kubectl config set-context --current --namespace east
 ~~~
 
-## Step 2: Install Skupper on your clusters
+## Step 2: Install Skupper on your Kubernetes clusters
 
 Using Skupper on Kubernetes requires the installation of the
 Skupper custom resource definitions (CRDs) and the Skupper
@@ -126,13 +125,13 @@ installation YAML to install the CRDs and controller.
 _**West:**_
 
 ~~~ shell
-kubectl apply -f https://skupper.io/v2/install.yaml
+kubectl apply -f https://github.com/skupperproject/skupper/releases/download/2.0.0-preview-2/skupper-setup-cluster-scope.yaml
 ~~~
 
 _**East:**_
 
 ~~~ shell
-kubectl apply -f https://skupper.io/v2/install.yaml
+kubectl apply -f https://github.com/skupperproject/skupper/releases/download/2.0.0-preview-2/skupper-setup-cluster-scope.yaml
 ~~~
 
 ## Step 3: Apply your YAML resources
@@ -351,8 +350,8 @@ and requests.
 You can configure sites and service bindings declaratively, but
 linking sites is different.  To create a link, you must have the
 authentication secret and connection details of the remote site.
-Since these cannot be known in advance, linking must be
-procedural, not declarative.
+Since these cannot always be known in advance, linking is
+usually procedural, not declarative.
 
 <!--
 **Note:** There are several ways to automate the generation and
@@ -369,7 +368,7 @@ a link in East.
 To install the Skupper command:
 
 ~~~ shell
-curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-1
+curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-2
 ~~~
 
 For more installation options, see [Installing
@@ -424,7 +423,7 @@ to use `scp` or a similar tool to transfer the token securely.  By
 default, tokens expire after a single use or 15 minutes after
 being issued.
 
-## Step 5: Access the frontend
+## Step 5: Access the frontend service
 
 In order to use and test the application, we need external access
 to the frontend.
