@@ -39,7 +39,8 @@ sites:
     env:
       KUBECONFIG: ~/.kube/config-east
 steps:
-  - standard: platform/set_up_your_kubernetes_clusters
+  - standard: platform/access_your_kubernetes_clusters
+  - standard: platform/create_your_kubernetes_namespaces
   - standard: platform/install_skupper_on_your_kubernetes_clusters
   - title: Apply your YAML resources
     preamble: |
@@ -263,7 +264,7 @@ steps:
       To install the Skupper command:
 
       ~~~ shell
-      curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-2
+      curl https://skupper.io/v2/install.sh | sh
       ~~~
 
       For more installation options, see [Installing
@@ -278,8 +279,6 @@ steps:
   - standard: skupper/cleaning_up/kubernetes_cli
     commands:
       west:
-        - run: kubectl delete -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml --ignore-not-found
-        - run: kubectl delete -f https://skupper.io/v2/install.yaml --ignore-not-found
+        - run: kubectl delete -f west/ --ignore-not-found
       east:
-        - run: kubectl delete -f east/site.yaml -f east/backend.yaml -f east/connector.yaml --ignore-not-found
-        - run: kubectl delete -f https://skupper.io/v2/install.yaml --ignore-not-found
+        - run: kubectl delete -f east/ --ignore-not-found

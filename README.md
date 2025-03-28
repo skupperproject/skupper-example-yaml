@@ -17,11 +17,12 @@ across cloud providers, data centers, and edge sites.
 
 * [Overview](#overview)
 * [Prerequisites](#prerequisites)
-* [Step 1: Set up your Kubernetes clusters](#step-1-set-up-your-kubernetes-clusters)
-* [Step 2: Install Skupper on your Kubernetes clusters](#step-2-install-skupper-on-your-kubernetes-clusters)
-* [Step 3: Apply your YAML resources](#step-3-apply-your-yaml-resources)
-* [Step 4: Link your sites](#step-4-link-your-sites)
-* [Step 5: Access the frontend service](#step-5-access-the-frontend-service)
+* [Step 1: Access your Kubernetes clusters](#step-1-access-your-kubernetes-clusters)
+* [Step 2: Create your Kubernetes namespaces](#step-2-create-your-kubernetes-namespaces)
+* [Step 3: Install Skupper on your Kubernetes clusters](#step-3-install-skupper-on-your-kubernetes-clusters)
+* [Step 4: Apply your YAML resources](#step-4-apply-your-yaml-resources)
+* [Step 5: Link your sites](#step-5-link-your-sites)
+* [Step 6: Access the frontend service](#step-6-access-the-frontend-service)
 * [Cleaning up](#cleaning-up)
 * [Next steps](#next-steps)
 * [About this example](#about-this-example)
@@ -55,16 +56,16 @@ services without exposing the backend to the public internet.
 
 ## Prerequisites
 
-* The `kubectl` command-line tool, version 1.15 or later
-  ([installation guide][install-kubectl])
-
 * Access to at least one Kubernetes cluster, from [any provider you
-  choose][kube-providers]
+  choose][kube-providers].
 
-[install-kubectl]: https://kubernetes.io/docs/tasks/tools/install-kubectl/
+* The `kubectl` command-line tool, version 1.15 or later
+  ([installation guide][install-kubectl]).
+
 [kube-providers]: https://skupper.io/start/kubernetes.html
+[install-kubectl]: https://kubernetes.io/docs/tasks/tools/install-kubectl/
 
-## Step 1: Set up your Kubernetes clusters
+## Step 1: Access your Kubernetes clusters
 
 Skupper is designed for use with multiple Kubernetes clusters.
 The `skupper` and `kubectl` commands use your
@@ -73,33 +74,43 @@ and namespace where they operate.
 
 [kubeconfig]: https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/
 
-Your kubeconfig is stored in a file in your home directory.  The
-`skupper` and `kubectl` commands use the `KUBECONFIG` environment
-variable to locate it.  A single kubeconfig supports only one
-active context per user.  Since you will be using multiple
-contexts at once in this exercise, you need to create multiple
-kubeconfigs.
+This example uses multiple cluster contexts at once. The
+`KUBECONFIG` environment variable tells `skupper` and `kubectl`
+which kubeconfig to use.
 
-For each namespace, open a new terminal window.  In each terminal,
+For each cluster, open a new terminal window.  In each terminal,
 set the `KUBECONFIG` environment variable to a different path and
-log in to your cluster.  Then create the namespace you wish to use
-and set the namespace on your current context.
-
-**Note:** The login procedure varies by provider.  See the
-documentation for yours:
-
-* [Minikube](https://skupper.io/start/minikube.html#cluster-access)
-* [Amazon Elastic Kubernetes Service (EKS)](https://skupper.io/start/eks.html#cluster-access)
-* [Azure Kubernetes Service (AKS)](https://skupper.io/start/aks.html#cluster-access)
-* [Google Kubernetes Engine (GKE)](https://skupper.io/start/gke.html#cluster-access)
-* [IBM Kubernetes Service](https://skupper.io/start/ibmks.html#cluster-access)
-* [OpenShift](https://skupper.io/start/openshift.html#cluster-access)
+log in to your cluster.
 
 _**West:**_
 
 ~~~ shell
 export KUBECONFIG=~/.kube/config-west
-# Enter your provider-specific login command
+<provider-specific login command>
+~~~
+
+_**East:**_
+
+~~~ shell
+export KUBECONFIG=~/.kube/config-east
+<provider-specific login command>
+~~~
+
+**Note:** The login procedure varies by provider.
+
+## Step 2: Create your Kubernetes namespaces
+
+The example application has different components deployed to
+different Kubernetes namespaces.  To set up our example, we need
+to create the namespaces.
+
+For each cluster, use `kubectl create namespace` and `kubectl
+config set-context` to create the namespace you wish to use and
+set the namespace on your current context.
+
+_**West:**_
+
+~~~ shell
 kubectl create namespace west
 kubectl config set-context --current --namespace west
 ~~~
@@ -107,13 +118,11 @@ kubectl config set-context --current --namespace west
 _**East:**_
 
 ~~~ shell
-export KUBECONFIG=~/.kube/config-east
-# Enter your provider-specific login command
 kubectl create namespace east
 kubectl config set-context --current --namespace east
 ~~~
 
-## Step 2: Install Skupper on your Kubernetes clusters
+## Step 3: Install Skupper on your Kubernetes clusters
 
 Using Skupper on Kubernetes requires the installation of the
 Skupper custom resource definitions (CRDs) and the Skupper
@@ -125,16 +134,16 @@ installation YAML to install the CRDs and controller.
 _**West:**_
 
 ~~~ shell
-kubectl apply -f https://github.com/skupperproject/skupper/releases/download/2.0.0-preview-2/skupper-setup-cluster-scope.yaml
+kubectl apply -f https://skupper.io/v2/install.yaml
 ~~~
 
 _**East:**_
 
 ~~~ shell
-kubectl apply -f https://github.com/skupperproject/skupper/releases/download/2.0.0-preview-2/skupper-setup-cluster-scope.yaml
+kubectl apply -f https://skupper.io/v2/install.yaml
 ~~~
 
-## Step 3: Apply your YAML resources
+## Step 4: Apply your YAML resources
 
 To configure our example sites and service bindings, we are
 using the following resources:
@@ -341,7 +350,7 @@ deployment.apps/backend created
 connector.skupper.io/backend created
 ~~~
 
-## Step 4: Link your sites
+## Step 5: Link your sites
 
 A Skupper _link_ is a channel for communication between two
 sites.  Links serve as a transport for application connections
@@ -368,7 +377,7 @@ a link in East.
 To install the Skupper command:
 
 ~~~ shell
-curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-2
+curl https://skupper.io/v2/install.sh | sh
 ~~~
 
 For more installation options, see [Installing
@@ -423,7 +432,7 @@ to use `scp` or a similar tool to transfer the token securely.  By
 default, tokens expire after a single use or 15 minutes after
 being issued.
 
-## Step 5: Access the frontend service
+## Step 6: Access the frontend service
 
 In order to use and test the application, we need external access
 to the frontend.
@@ -448,15 +457,13 @@ the following commands.
 _**West:**_
 
 ~~~ shell
-kubectl delete -f west/site.yaml -f west/frontend.yaml -f west/listener.yaml --ignore-not-found
-kubectl delete -f https://skupper.io/v2/install.yaml --ignore-not-found
+kubectl delete -f west/ --ignore-not-found
 ~~~
 
 _**East:**_
 
 ~~~ shell
-kubectl delete -f east/site.yaml -f east/backend.yaml -f east/connector.yaml --ignore-not-found
-kubectl delete -f https://skupper.io/v2/install.yaml --ignore-not-found
+kubectl delete -f east/ --ignore-not-found
 ~~~
 
 ## Next steps

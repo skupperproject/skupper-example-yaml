@@ -21,9 +21,9 @@
 # Platform steps
 #
 
-platform/set_up_your_kubernetes_clusters:
+platform/access_your_kubernetes_clusters:
   old_name: kubernetes/set_up_your_clusters
-  title: Set up your Kubernetes clusters
+  title: Access your Kubernetes clusters
   platform: kubernetes
   preamble: |
     Skupper is designed for use with multiple Kubernetes clusters.
@@ -33,58 +33,65 @@ platform/set_up_your_kubernetes_clusters:
 
     [kubeconfig]: https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/
 
-    Your kubeconfig is stored in a file in your home directory.  The
-    `skupper` and `kubectl` commands use the `KUBECONFIG` environment
-    variable to locate it.  A single kubeconfig supports only one
-    active context per user.  Since you will be using multiple
-    contexts at once in this exercise, you need to create multiple
-    kubeconfigs.
+    This example uses multiple cluster contexts at once. The
+    `KUBECONFIG` environment variable tells `skupper` and `kubectl`
+    which kubeconfig to use.
 
-    For each namespace, open a new terminal window.  In each terminal,
+    For each cluster, open a new terminal window.  In each terminal,
     set the `KUBECONFIG` environment variable to a different path and
-    log in to your cluster.  Then create the namespace you wish to use
-    and set the namespace on your current context.
-
-    **Note:** The login procedure varies by provider.  See the
-    documentation for yours:
-
-    * [Minikube](https://skupper.io/start/minikube.html#cluster-access)
-    * [Amazon Elastic Kubernetes Service (EKS)](https://skupper.io/start/eks.html#cluster-access)
-    * [Azure Kubernetes Service (AKS)](https://skupper.io/start/aks.html#cluster-access)
-    * [Google Kubernetes Engine (GKE)](https://skupper.io/start/gke.html#cluster-access)
-    * [IBM Kubernetes Service](https://skupper.io/start/ibmks.html#cluster-access)
-    * [OpenShift](https://skupper.io/start/openshift.html#cluster-access)
+    log in to your cluster.
   commands:
     "*":
       - run: export KUBECONFIG=@kubeconfig@
-      - run: "# Enter your provider-specific login command"
+      - run: "<provider-specific login command>"
+        apply: readme
+  postamble: |
+    **Note:** The login procedure varies by provider.
+platform/access_your_kubernetes_cluster:
+  old_name: kubernetes/set_up_your_kubernetes_cluster
+  title: Access your Kubernetes cluster
+  platform: kubernetes
+  preamble: |
+    Open a new terminal window and log in to your cluster.
+  commands:
+    "*":
+      - run: "<provider-specific login command>"
+        apply: readme
+  postamble: |
+    **Note:** The login procedure varies by provider.
+platform/create_your_kubernetes_namespaces:
+  title: Create your Kubernetes namespaces
+  platform: kubernetes
+  preamble: |
+    The example application has different components deployed to
+    different Kubernetes namespaces.  To set up our example, we need
+    to create the namespaces.
+
+    For each cluster, use `kubectl create namespace` and `kubectl
+    config set-context` to create the namespace you wish to use and
+    set the namespace on your current context.
+  commands:
+    "*":
       - run: kubectl create namespace @namespace@
         apply: readme
       - run: kubectl create namespace @namespace@ --dry-run=client -o yaml | kubectl apply -f -
         apply: test
       - run: kubectl config set-context --current --namespace @namespace@
-platform/set_up_your_kubernetes_cluster:
-  old_name: kubernetes/set_up_your_kubernetes_cluster
-  title: Set up your Kubernetes cluster
+platform/create_your_kubernetes_namespace:
+  title: Create your Kubernetes namespace
   platform: kubernetes
   preamble: |
-    Open a new terminal window and log in to your cluster.  Then
+    Our example requires a Kubernetes namespace.
+
+    Use `kubectl create namespace` and `kubectl config set-context` to
     create the namespace you wish to use and set the namespace on your
     current context.
-
-    **Note:** The login procedure varies by provider.  See the
-    documentation for your chosen providers:
-
-    * [Minikube](https://skupper.io/start/minikube.html#cluster-access)
-    * [Amazon Elastic Kubernetes Service (EKS)](https://skupper.io/start/eks.html#cluster-access)
-    * [Azure Kubernetes Service (AKS)](https://skupper.io/start/aks.html#cluster-access)
-    * [Google Kubernetes Engine (GKE)](https://skupper.io/start/gke.html#cluster-access)
-    * [IBM Kubernetes Service](https://skupper.io/start/ibmks.html#cluster-access)
-    * [OpenShift](https://skupper.io/start/openshift.html#cluster-access)
   commands:
     "*":
-      - run: "# Enter your provider-specific login command"
       - run: kubectl create namespace @namespace@
+        apply: readme
+      - run: kubectl create namespace @namespace@ --dry-run=client -o yaml | kubectl apply -f -
+        apply: test
       - run: kubectl config set-context --current --namespace @namespace@
 platform/set_up_your_podman_environments:
   title: Set up your Podman environments
@@ -100,6 +107,7 @@ platform/set_up_your_podman_environments:
     "*":
       - run: export SKUPPER_PLATFORM=podman
       - run: systemctl --user enable --now podman.socket
+      - run: "skupper system teardown || :"
   postamble: |
     If the `systemctl` command doesn't work, you can try the `podman
     system service` command instead:
@@ -121,6 +129,7 @@ platform/set_up_your_podman_environment:
     "*":
       - run: export SKUPPER_PLATFORM=podman
       - run: systemctl --user enable --now podman.socket
+      - run: "skupper system teardown || :"
   postamble: |
     If the `systemctl` command does not work, you can try the `podman
     system service` command instead:
@@ -145,7 +154,7 @@ platform/install_the_skupper_command_line_tool:
     [here][install-script]) to download and extract the command:
 
     ~~~ shell
-    curl https://skupper.io/install.sh | sh -s -- --version 2.0.0-preview-2
+    curl https://skupper.io/v2/install.sh | sh
     ~~~
 
     The script installs the command under your home directory.  It
@@ -183,8 +192,7 @@ platform/install_skupper_on_your_kubernetes_cluster:
     the CRDs and controller.
   commands:
     "*":
-      # - run: kubectl apply -f https://skupper.io/v2/install.yaml
-      - run: kubectl apply -f https://github.com/skupperproject/skupper/releases/download/2.0.0-preview-2/skupper-setup-cluster-scope.yaml
+      - run: kubectl apply -f https://skupper.io/v2/install.yaml
 skupper/create_your_sites/kubernetes_cli:
   old_name: kubernetes/create_your_sites
   title: Create your sites
@@ -205,12 +213,12 @@ skupper/create_your_sites/kubernetes_cli:
     [minikube-tunnel]: https://skupper.io/start/minikube.html#running-minikube-tunnel
   commands:
     "0":
-      - run: skupper site create @namespace@ --enable-link-access --timeout 2m
+      - run: skupper site create @namespace@ --enable-link-access
         output: |
           Waiting for status...
           Site "@namespace@" is configured. Check the status to see when it is ready
     "*":
-      - run: skupper site create @namespace@ --timeout 2m
+      - run: skupper site create @namespace@
         output: |
           Waiting for status...
           Site "@namespace@" is configured. Check the status to see when it is ready
@@ -285,8 +293,8 @@ hello_world/deploy_the_frontend_and_backend/kubernetes_cli:
   old_name: hello_world/deploy_the_frontend_and_backend
   title: Deploy the frontend and backend
   preamble: |
-    This example runs the frontend and the backend in separate
-    Kubernetes namespaces, on different clusters.
+    Deploy the Hello World components, placing the frontend on one
+    cluster and the backend on the other.
 
     Use `kubectl create deployment` to deploy the frontend in @site0@
     and the backend in @site1@.
