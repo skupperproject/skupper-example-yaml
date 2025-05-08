@@ -1,0 +1,28 @@
+---
+apiVersion: skupper.io/v2alpha1
+kind: Site
+metadata:
+  name: west
+  namespace: west
+---
+apiVersion: skupper.io/v2alpha1
+kind: Listener
+metadata:
+  name: backend
+  namespace: west
+spec:
+  port: 8080
+  host: 0.0.0.0
+  routingKey: backend
+---
+apiVersion: skupper.io/v2alpha1
+kind: RouterAccess
+metadata:
+  name: go-west
+spec:
+  roles:
+    - port: 55671
+      name: inter-router
+    - port: 45671
+      name: edge
+  bindHost: 0.0.0.0
